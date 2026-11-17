@@ -6,8 +6,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
  
 WORKDIR /build
-COPY oabextract.c .
-RUN gcc -O2 -o /usr/local/bin/oabextract oabextract.c -lmspack \
+COPY Oabextract.c .
+RUN gcc -O2 -o /usr/local/bin/oabextract Oabextract.c -lmspack \
     && test -x /usr/local/bin/oabextract
  
 WORKDIR /app
