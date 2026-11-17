@@ -1,8 +1,8 @@
 FROM python:3.12-slim
 
-# oabextract (needed to decompress LZX-compressed .oab files)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends mspack-tools \
+    && (apt-get install -y --no-install-recommends mspack-tools \
+        || apt-get install -y --no-install-recommends libmspack-tools) \
     && rm -rf /var/lib/apt/lists/* \
     && command -v oabextract
 
