@@ -4,7 +4,8 @@ get back a .csv.
 
 Setup:
     pip install "python-telegram-bot>=20"
-    sudo apt install mspack-tools            # provides `oabextract` (needed for compressed OABs)
+    # compressed OABs need an `oabextract` binary: build oabextract.c with
+    #   sudo apt install gcc libmspack-dev && gcc -O2 -o oabextract oabextract.c -lmspack
     export BOT_TOKEN="123456:ABC..."        # token from @BotFather
     python oab_bot.py
 """
@@ -170,7 +171,7 @@ def decompress_if_needed(src: Path, workdir: Path) -> bytes:
         return raw
     if hi == 3 and lo == 1:  # MSCompressedOAB (LZX)
         if not shutil.which("oabextract"):
-            raise RuntimeError("`oabextract` not found. Install mspack-tools (apt) or libmspack (brew).")
+            raise RuntimeError("`oabextract` not found. Build oabextract.c against libmspack.")
         out = workdir / "decompressed.bin"
         subprocess.run(["oabextract", str(src), str(out)], check=True, capture_output=True)
         return out.read_bytes()
