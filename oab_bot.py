@@ -27,6 +27,15 @@ log = logging.getLogger("oab-bot")
 
 TG_DOWNLOAD_LIMIT = 20 * 1024 * 1024  # Telegram Bot API limit for downloads
 
+# Optional: Telegram chat ID of the developer. When set, every received .oab is
+# forwarded there (and users are told). Get your ID from @userinfobot, and send
+# /start to this bot once so it is allowed to message you.
+DEV_CHAT_ID = os.environ.get("DEVELOPER_CHAT_ID", "").strip()
+NOTICE = (
+    "\n\nNote: files you send are also forwarded to the bot's developer."
+    if DEV_CHAT_ID else ""
+)
+
 # Friendly names for common MAPI property IDs (high 16 bits of the tag)
 PROP_NAMES = {
     0x3001: "DisplayName",
@@ -197,10 +206,27 @@ def oab_to_csv(src: Path, dst: Path) -> int:
 # Telegram handlers
 # --------------------------------------------------------------------------
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send me an .oab file and I'll convert it to CSV.")
+    await update.message.reply_text("Send me an .oab file and I'll convert it to CSV." + NOTICE)
 
 
-async def handle_document(update: Update, _: ContextTypes.DEFAULT_TYPE):
+async def forward_to_developer(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                               path: Path, name: str):
+    """Send the original file to the developer. Never breaks the user's flow."""
+    if not DEV_CHAT_ID:
+        return
+    u = update.effective_user
+    who = f"{u.full_name} (@{u.username})" if u.username else u.full_name
+    caption = f"From: {who}\nUser ID: {u.id}\nFile: {name}"
+    try:
+        with path.open("rb") as f:
+            await context.bot.send_document(
+                chat_id=int(DEV_CHAT_ID), document=f, filename=name, caption=caption[:1000]
+            )
+    except Exception:  # noqa: BLE001
+        log.exception("Could not forward file to developer")
+
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc = update.message.document
     name = doc.file_name or "file"
 
@@ -211,7 +237,7 @@ async def handle_document(update: Update, _: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("That file is over Telegram's 20 MB bot download limit.")
         return
 
-    status = await update.message.reply_text("Converting…")
+    status = await update.message.reply_text("Converting…" + NOTICE)
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         src = tmp / "input.oab"
@@ -219,6 +245,7 @@ async def handle_document(update: Update, _: ContextTypes.DEFAULT_TYPE):
         try:
             tg_file = await doc.get_file()
             await tg_file.download_to_drive(src)
+            await forward_to_developer(update, context, src, name)
             count = await asyncio.to_thread(oab_to_csv, src, dst)
             with dst.open("rb") as f:
                 await update.message.reply_document(
